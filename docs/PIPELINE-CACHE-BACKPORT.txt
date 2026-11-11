@@ -1,0 +1,119 @@
+Pipeline build waits and shader-cache backport — 2026-11-05
+
+Implemented locally; nothing published. Console installation restored after testing.
+
+Changes
+- headless/striped_wait.h bounds Vulkan build synchronization. Graphics/compute
+  pipelines share 64 build-wait slots instead of retaining a separate thread-library
+  mutex/condition pair for every cached pipeline. Each waiter keeps its own built
+  predicate; a shared condition broadcasts so another pipeline cannot consume the
+  only completion notification. Wrapper sizes/alignment match the upstream members.
+- headless/pipeline_wait.cmake generates the two checked header overrides and puts
+  them ahead of the upstream headers for video_core. Changed upstream anchors fail
+  configuration. The emulator submodule and its existing local patches are untouched.
+- tools/patch-radv-disk-cache.py adapts the identity guard in the pinned
+  Mesa build export for console elevation. The identity mismatch exception applies only to __PROSPERO__
+  with MESA_SHADER_CACHE_DIR=/data/eglantineps5/cache/radv. Desktop identity policy,
+  explicit cache-disable options and unrelated cache paths retain their behavior.
+- Driver preparation applies the patch, records its fingerprint and rebuilds and
+  re-isolates a stale driver. Startup logs name the selected RADV cache directory.
+- The existing shader_cache_reader.inc already implements truncated-cache
+  recovery and was retained. The emulator
+  core also already writes its Vulkan pipeline blob using temporary-file/rename
+  replacement; this task did not replace that writer.
+- Added host concurrency/cache-policy checks and a reversible console test runner.
+  tools/build-headless-host.sh includes the new host checks.
+
+Validation
+python3 tools/check-pipeline-cache.py passed with address/undefined-behavior
+sanitizers: 16,000 retained pipelines, no more than 64 lock and 64 condition slots,
+24 colliding waiters, false-predicate notifications, out-of-order completion and
+three destruction/recreation cycles. The test compiles the actual patched Mesa
+cache-enabled function as C for desktop and PS5 policy cases, and checks normal /
+elevated identities, expected / unexpected cache paths, explicit disable options
+and patch idempotence.
+
+The PS5 driver rebuilt at the existing pinned revision. Native app build and its
+standard source/host checks passed, as did tools/check-radv-native.py. Ninja's
+actual compiler dependencies for both pipeline implementations include the new
+header overrides and striped_wait.h. The cached emulator source stamp still
+matches the locally modified Eglantine submodule.
+
+Console qualification
+Mario Kart World 1.8.0, title 0400C3F00006E000; Vulkan, 1080p/60 Hz output;
+0.5x render resolution; three fresh processes with 90-second observation windows,
+then scripted normal return to the launcher. This was an input-enabled release
+twin: scripted input on, development Vulkan/profile/ROM instrumentation off.
+Original caches were renamed aside for this sequence and restored afterward.
+
+Run          Cached pipelines  Driver hits  Driver misses  First guest frame
+Cold                 0               0          500             61.965 s
+Warm disk          511            1,117          173             58.310 s
+Fully warm         697              65          100             58.386 s
+
+For Warm disk, only this test's Vulkan pipeline blob was removed after Cold;
+the emulator's shader records and driver disk cache remained. The fresh process
+therefore demonstrates driver disk-cache reuse independently of the Vulkan blob.
+Fully warm explicitly logged loading its Vulkan blob. The runs reached 799, 947
+and 971 presented frames respectively in the final sampled frame summaries.
+All three logged first-frame, shortcut-return, core-shutdown and launcher markers.
+Screenshots from all three were captured; the final one shows the game's rendered
+title/attract scene. No mutex-lock exhaustion, out-of-device-memory or device-lost
+errors occurred in this final sequence. Service/input stub diagnostics remain.
+
+The scenes/progress differ, and warm runs encounter new shaders. These counters
+prove persistence/reuse; they are not a controlled FPS benchmark or proof that
+all shader compilation/stutter is eliminated. The console's identities were 1/1
+for both user and group; the mismatched-identity branch was verified by the host
+policy test, not by changing console credentials.
+
+Material limitation
+Two earlier 1x runs rendered the game but ended with
+VK_ERROR_OUT_OF_DEVICE_MEMORY. The first captured report records a failure 157 s
+after startup, a 6 MiB largest free block, and a GPUBack allocation failure.
+The next also exhausted device memory. This matches the type of memory limitation
+already recorded in docs/MKW-TITLE-FPS.md; this backport does not fix that GPU
+memory problem or establish long-session stability at 1x.
+
+An intermediate 0.5x warm test exposed a stale scripted stop-input file, which
+returned the next process to the launcher before rendering. The runner now removes
+that file before every launch. The final three-run sequence above uses the corrected
+runner and explicitly checks both rendered-frame and cache-reuse evidence.
+
+Restoration and evidence
+The final runner exited 0. verification.json reports cache_reuse_verified=true.
+restored.json verifies the original executable, settings, byte-identical original
+save data and original caches. The patched candidate is available locally; it was
+not left installed on the console.
+
+Private evidence, not for publication:
+.local/pipeline-cache/build-receipt.json
+.local/pipeline-cache/host-tests.log
+.local/pipeline-cache/driver-build.log
+.local/pipeline-cache/native-build.log
+.local/pipeline-cache/native-link-check.log
+.local/pipeline-cache/console-final/{receipt,results,checked-summary,verification,restored}.json
+.local/pipeline-cache/console-final/{cold,warm-disk,warm}/
+.local/pipeline-cache/console/crash/ (first 1x memory-failure report and logs)
+
+Candidate SELF SHA-256:
+cf6398c09fca03027c773b6cf9674e22084748c446eaf5cde06dcf2285631302
+Core source stamp:
+eglantine-3140648a668aaebf87bae2dea17512fdca125ba0-340e4a3ed13d
+
+Repeat the host checks with:
+  python3 tools/check-pipeline-cache.py
+
+Repeat the console sequence using the retained candidate and launcher:
+  python3 tools/check-pipeline-cache-console.py --host "$PS5_HOST" \
+    --candidate .local/pipeline-cache/candidate.bin \
+    --elf .local/pipeline-cache/candidate.elf \
+    --launcher .local/pipeline-cache/launch-mkw.elf \
+    --out .local/pipeline-cache/console-repeat \
+    --seconds 90 --resolution 0.5x
+
+The runner acquires the shared console lease automatically, verifies uploaded
+PT_LOAD segments against the matching packaged ELF, preserves originals, and
+restores them in its finally block. Use a new output directory for each run.
+License provenance is recorded in THIRD_PARTY_NOTICES.md. No new emulator
+or graphics-driver revision was imported.

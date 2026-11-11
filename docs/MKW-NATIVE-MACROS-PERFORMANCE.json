@@ -1,0 +1,308 @@
+{
+  "runs": [
+    {
+      "run": "jit-a",
+      "mode": "jit",
+      "macros": {
+        "front:6": {
+          "calls": 2179072,
+          "own_ticks_per_call": 170.17112513950892,
+          "window_seconds": 19.003045999999998,
+          "total_ticks_per_call": 294.64357487958176,
+          "writes_per_call": 3.0,
+          "own_ns_per_call": 106.60347374522892
+        },
+        "front:7": {
+          "calls": 1146880,
+          "own_ticks_per_call": 237.1138689313616,
+          "window_seconds": 19.874978999999996,
+          "total_ticks_per_call": 416.1928920200893,
+          "writes_per_call": 3.931661551339286,
+          "own_ns_per_call": 148.53966605986443
+        },
+        "front:9": {
+          "calls": 835584,
+          "own_ticks_per_call": 87.17942899816177,
+          "window_seconds": 19.738056999999998,
+          "total_ticks_per_call": 107.56541053921569,
+          "writes_per_call": 0.4406319412530637,
+          "own_ns_per_call": 54.61343669621109
+        },
+        "front:8": {
+          "calls": 245760,
+          "own_ticks_per_call": 358.29376220703125,
+          "window_seconds": 19.63912900000001,
+          "total_ticks_per_call": 673.591650390625,
+          "writes_per_call": 6.6753662109375,
+          "own_ns_per_call": 224.45264812819096
+        },
+        "front:10": {
+          "calls": 163840,
+          "own_ticks_per_call": 610.9794799804688,
+          "window_seconds": 11.716775999999996,
+          "total_ticks_per_call": 1186.7641174316407,
+          "writes_per_call": 13.87938232421875,
+          "own_ns_per_call": 382.74727806832595
+        }
+      },
+      "fps_last_windows": [
+        36.315,
+        34.188,
+        6.396,
+        15.791,
+        14.304
+      ],
+      "fps_median_last_windows": 15.791
+    },
+    {
+      "run": "native-a",
+      "mode": "native",
+      "macros": {
+        "front:6": {
+          "calls": 2359296,
+          "own_ticks_per_call": 141.1044341193305,
+          "window_seconds": 18.939877999999993,
+          "total_ticks_per_call": 261.4363496568468,
+          "writes_per_call": 3.0,
+          "own_ns_per_call": 88.3946840314042
+        },
+        "front:7": {
+          "calls": 1130496,
+          "own_ticks_per_call": 169.6336094953012,
+          "window_seconds": 19.44314399999999,
+          "total_ticks_per_call": 338.9002880151721,
+          "writes_per_call": 3.898642719655797,
+          "own_ns_per_call": 106.26674778882489
+        },
+        "front:9": {
+          "calls": 1048576,
+          "own_ticks_per_call": 59.32684516906738,
+          "window_seconds": 19.415166999999997,
+          "total_ticks_per_call": 78.4781141281128,
+          "writes_per_call": 0.4337940216064453,
+          "own_ns_per_call": 37.16522280841156
+        },
+        "front:8": {
+          "calls": 327680,
+          "own_ticks_per_call": 258.0496307373047,
+          "window_seconds": 19.778461000000007,
+          "total_ticks_per_call": 549.3919677734375,
+          "writes_per_call": 6.461114501953125,
+          "own_ns_per_call": 161.65484604228823
+        },
+        "front:10": {
+          "calls": 196608,
+          "own_ticks_per_call": 499.52642313639325,
+          "window_seconds": 17.249545999999995,
+          "total_ticks_per_call": 1044.3418629964192,
+          "writes_per_call": 13.61663818359375,
+          "own_ns_per_call": 312.92765967324016
+        }
+      },
+      "fps_last_windows": [
+        40.523,
+        49.792,
+        19.507,
+        23.779,
+        20.873
+      ],
+      "fps_median_last_windows": 23.779
+    },
+    {
+      "run": "jit-b",
+      "mode": "jit",
+      "macros": {
+        "front:6": {
+          "calls": 2097152,
+          "own_ticks_per_call": 172.98058891296387,
+          "window_seconds": 19.00465299999999,
+          "total_ticks_per_call": 299.30460691452026,
+          "writes_per_call": 3.0,
+          "own_ns_per_call": 108.36345856854217
+        },
+        "front:7": {
+          "calls": 1376256,
+          "own_ticks_per_call": 239.01236833844865,
+          "window_seconds": 19.412323999999998,
+          "total_ticks_per_call": 421.9303196498326,
+          "writes_per_call": 3.9276355561755953,
+          "own_ns_per_call": 149.72897847425213
+        },
+        "front:9": {
+          "calls": 1048576,
+          "own_ticks_per_call": 88.4981279373169,
+          "window_seconds": 19.272979000000007,
+          "total_ticks_per_call": 109.87044143676758,
+          "writes_per_call": 0.4451169967651367,
+          "own_ns_per_call": 55.43953388292733
+        },
+        "front:8": {
+          "calls": 311296,
+          "own_ticks_per_call": 357.6763273540296,
+          "window_seconds": 18.50067,
+          "total_ticks_per_call": 680.3331234580592,
+          "writes_per_call": 6.638980263157895,
+          "own_ns_per_call": 224.06585689032735
+        },
+        "front:10": {
+          "calls": 245760,
+          "own_ticks_per_call": 609.9658610026041,
+          "window_seconds": 17.015531999999993,
+          "total_ticks_per_call": 1205.2955118815105,
+          "writes_per_call": 13.814347330729166,
+          "own_ns_per_call": 382.1122978153255
+        }
+      },
+      "fps_last_windows": [
+        40.472,
+        47.792,
+        15.36,
+        15.542,
+        20.564
+      ],
+      "fps_median_last_windows": 20.564
+    },
+    {
+      "run": "native-b",
+      "mode": "native",
+      "macros": {
+        "front:6": {
+          "calls": 2981888,
+          "own_ticks_per_call": 138.28312599265968,
+          "window_seconds": 19.18718600000001,
+          "total_ticks_per_call": 258.29224873637105,
+          "writes_per_call": 3.0,
+          "own_ns_per_call": 86.6272793288603
+        },
+        "front:7": {
+          "calls": 1277952,
+          "own_ticks_per_call": 170.00703625801282,
+          "window_seconds": 18.252328000000006,
+          "total_ticks_per_call": 339.80298477564105,
+          "writes_per_call": 3.9029509715544872,
+          "own_ns_per_call": 106.5006804848793
+        },
+        "front:9": {
+          "calls": 1114112,
+          "own_ticks_per_call": 59.9572852639591,
+          "window_seconds": 18.121462000000008,
+          "total_ticks_per_call": 79.01669311523438,
+          "writes_per_call": 0.42664382036994486,
+          "own_ns_per_call": 37.56016116266309
+        },
+        "front:8": {
+          "calls": 344064,
+          "own_ticks_per_call": 256.3391810825893,
+          "window_seconds": 16.796356000000003,
+          "total_ticks_per_call": 522.7125040690104,
+          "writes_per_call": 5.813807896205357,
+          "own_ns_per_call": 160.58333714376326
+        },
+        "front:10": {
+          "calls": 180224,
+          "own_ticks_per_call": 486.6732677112926,
+          "window_seconds": 19.335137000000003,
+          "total_ticks_per_call": 1008.0217562588779,
+          "writes_per_call": 13.167247425426137,
+          "own_ns_per_call": 304.8758176478686
+        }
+      },
+      "fps_last_windows": [
+        42.225,
+        11.743,
+        15.075,
+        25.552,
+        20.86
+      ],
+      "fps_median_last_windows": 20.86
+    }
+  ],
+  "comparisons": [
+    {
+      "macro": "front:10",
+      "jit_own_ticks_median": 610.4726704915365,
+      "native_own_ticks_median": 493.0998454238429,
+      "own_ticks_reduction_percent": 19.22654866321667,
+      "jit_own_ticks_range": [
+        609.9658610026041,
+        610.9794799804688
+      ],
+      "native_own_ticks_range": [
+        486.6732677112926,
+        499.52642313639325
+      ],
+      "jit_writes_per_call": 13.846864827473958,
+      "native_writes_per_call": 13.391942804509943,
+      "similar_write_mix": false
+    },
+    {
+      "macro": "front:6",
+      "jit_own_ticks_median": 171.5758570262364,
+      "native_own_ticks_median": 139.6937800559951,
+      "own_ticks_reduction_percent": 18.581913284784633,
+      "jit_own_ticks_range": [
+        170.17112513950892,
+        172.98058891296387
+      ],
+      "native_own_ticks_range": [
+        138.28312599265968,
+        141.1044341193305
+      ],
+      "jit_writes_per_call": 3.0,
+      "native_writes_per_call": 3.0,
+      "similar_write_mix": true
+    },
+    {
+      "macro": "front:7",
+      "jit_own_ticks_median": 238.06311863490512,
+      "native_own_ticks_median": 169.820322876657,
+      "own_ticks_reduction_percent": 28.66584129014358,
+      "jit_own_ticks_range": [
+        237.1138689313616,
+        239.01236833844865
+      ],
+      "native_own_ticks_range": [
+        169.6336094953012,
+        170.00703625801282
+      ],
+      "jit_writes_per_call": 3.9296485537574406,
+      "native_writes_per_call": 3.900796845605142,
+      "similar_write_mix": true
+    },
+    {
+      "macro": "front:8",
+      "jit_own_ticks_median": 357.9850447805304,
+      "native_own_ticks_median": 257.194405909947,
+      "own_ticks_reduction_percent": 28.154985896792148,
+      "jit_own_ticks_range": [
+        357.6763273540296,
+        358.29376220703125
+      ],
+      "native_own_ticks_range": [
+        256.3391810825893,
+        258.0496307373047
+      ],
+      "jit_writes_per_call": 6.657173237047697,
+      "native_writes_per_call": 6.13746119907924,
+      "similar_write_mix": false
+    },
+    {
+      "macro": "front:9",
+      "jit_own_ticks_median": 87.83877846773933,
+      "native_own_ticks_median": 59.642065216513245,
+      "own_ticks_reduction_percent": 32.10052979229661,
+      "jit_own_ticks_range": [
+        87.17942899816177,
+        88.4981279373169
+      ],
+      "native_own_ticks_range": [
+        59.32684516906738,
+        59.9572852639591
+      ],
+      "jit_writes_per_call": 0.4428744690091002,
+      "native_writes_per_call": 0.4302189209881951,
+      "similar_write_mix": true
+    }
+  ],
+  "limits": "Timestamp-counter estimates with equal instrumentation, first 1024 calls excluded; late ~20-second counter deltas where available; engine method writes subtracted. Interruptions/preemption remain. Attract scenes and shader progress vary: these FPS windows do not establish a controlled FPS gain."
+}

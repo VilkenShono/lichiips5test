@@ -1,0 +1,139 @@
+Native MME dispatch: implementation and Mario Kart World qualification
+2026-11-05
+
+Result
+The opt-in native path reduced measured dispatch overhead for recognized macros.
+Constant-buffer selection improved from 107.48 to 87.51 ns/call (18.6%), with
+exactly three method writes per call in both modes. Constant-buffer binding
+improved from 149.13 to 106.38 ns/call (28.7%) with a similar output mix.
+These are instrumented per-macro measurements, not a whole-game speedup claim.
+The warm repeat's final-window FPS medians were 20.56 JIT and 20.86 native;
+changing attract scenes and shader-cache progress prevent attributing that small
+difference to this change. A controlled FPS benefit is not established.
+
+Implementation
+Five MME operations have native equivalents: constant-buffer selection/binding,
+shader binding/unbinding and vertex-format updates. Recognition uses SHA-256 of
+the uploaded instruction window, never an entry address alone. The installed
+MKW 1.8.0 uses the same operations with data-RAM tables shifted by 128 words;
+that layout has separate signatures and handlers. Both signed layouts remain
+supported. No game instruction streams or capture files are bundled.
+
+Each macro engine owns independent front/back matcher state. Code generation,
+buffer identity/size and engine recreation invalidate matches. Unrecognized code
+and rejected parameters retain the existing JIT/interpreter path. All bounds are
+checked before effects. PS5 macro recovery and the existing Bananza-specific
+compatibility path are retained. A global include override and a Ninja dependency
+audit keep all compiled consumers on one MacroEngine layout.
+
+Native dispatch is on by default since 2026-11-08 (it only replaces macros whose SHA-256
+matches a signed Mario Kart World layout; every other title keeps the JIT):
+  EDEN_NX2_MME_NATIVE=0       existing JIT/interpreter path
+  EDEN_NX2_MME_NATIVE=1       enable recognized native replacements (also the default when unset)
+  EDEN_NX2_MME_NATIVE=check   compare effects on copies, execute the existing path
+Check mode samples the first 16 calls and every 4096th call per handler/context.
+These switches are read once per process from the app's env.txt. The separate
+EDEN_NX2_MME_BENCH=1 switch enables diagnostic timing; it is otherwise inactive.
+
+Validation
+- Sanitized boundary and invalidation checks passed: short RAM/parameter spans,
+  no-effect rejection, signature changes, generation/size/start bounds and engine
+  recreation.
+- Differential checks ran 1,200,000 randomized/edge cases across both layouts:
+  425,066 rejected inputs left RAM and method writes untouched; admitted calls
+  agreed with the actual core interpreter and x64 JIT, with zero differences.
+- The PS5 native build and link checks passed. All 68 compiled MacroEngine
+  consumers used the generated header. The broader native checks also passed,
+  including 2,239,931 assertions in 179 host test cases.
+- Five fresh-console runs completed: JIT A, comparison mode, native A, JIT B,
+  native B. Every run rendered guest frames and returned normally to the launcher.
+  There were no macro mismatches, JIT execution failures, device-lost errors or
+  out-of-device-memory errors in this sequence. Other service/input stub
+  diagnostics remain outside this change.
+- The comparison run recorded at least 1,840 sampled reference comparisons with
+  zero differences. The two native runs logged at least 11,862,016 replacements
+  across all five installed-game handlers, with zero declines in those counters.
+
+Console conditions
+Mario Kart World 1.8.0, Vulkan/RADV, 0.5x render resolution, 1080p/60 Hz output;
+reported firmware SDK tag 0x12200005. Nominal observation windows were 90 seconds,
+plus capture/normal-return time. Existing settings were retained apart from the
+same temporary resolution override. Shader caches persisted within the sequence;
+JIT A began cold. The original executable, settings, saves and caches were restored
+and verified afterward. This does not qualify sustained gameplay or fix the 1x
+GPU-memory exhaustion observed during earlier qualification.
+
+Method and measurements
+LFENCE/RDTSC scopes measure matched dispatch time; nested engine-method-write
+scopes are subtracted to expose dispatch/setup overhead. The first 1024 calls per
+handler/thread-path are excluded. Analysis uses late approximately 20-second
+counter deltas where available. The reported clock was 1,596,300,000 ticks/s.
+Each table value is the median of two run-average costs, not a percentile of
+individual calls. Timing instrumentation is equal in JIT/native measurements;
+interruptions, preemption and instrumentation overhead remain. The benchmark
+covers dispatch after parameter refresh/entry lookup, not the entire GPU thread.
+
+Operation                  JIT ns/call  Native ns/call  Reduction  Writes/call JIT/native
+Constant-buffer selection     107.48          87.51       18.6%          3.000 / 3.000
+Constant-buffer binding       149.13         106.38       28.7%          3.930 / 3.901
+Shader binding                224.26         161.12       28.2%          6.657 / 6.137
+Shader unbinding               55.03          37.36       32.1%          0.443 / 0.430
+Vertex-format updates         382.43         308.90       19.2%         13.847 / 13.392
+
+Conditional functions have differing output mixes. In particular, shader binding
+and vertex updates are not matched-workload speedups; their reductions above are
+observations under the recorded mixes. Constant-buffer selection has identical
+output counts and the clearest comparison. Binding has a close output mix.
+
+Run       Median of final five 5-second FPS windows
+JIT A                         15.791
+Native A                      23.779
+JIT B                         20.564
+Native B                      20.860
+
+Do not pool the cold JIT A run with warm runs to claim an FPS increase. The
+per-run macro averages, sample counts, counter-window lengths, output mixes and
+FPS windows are in MKW-NATIVE-MACROS-PERFORMANCE.json.
+
+Reproduction
+Host safety checks:
+  python3 tools/check-macro-native.py
+Optional differential check on an x64 host, using private uploaded-code fixtures:
+  python3 tools/check-macro-native.py --fixtures PRIVATE_FIXTURES.json
+The JSON maps one or more supported handler names to arrays of uint32 words;
+the runner verifies their signatures before comparing native/interpreter/JIT
+results. Fixtures and any uploaded-code captures remain private.
+
+Build the native app with EDEN_SCRIPTED_INPUT=ON for qualification, then package
+it with tools/package-headless-native.sh. Use the packaged eboot.elf matching the
+candidate SELF, and a one-shot launcher from tools/mkw-title/launch.c:
+  python3 tools/check-macro-native-console.py --host "$PS5_HOST" \
+    --candidate CANDIDATE.bin --elf MATCHING.elf --launcher LAUNCHER.elf \
+    --out NEW_PRIVATE_OUTPUT_DIRECTORY --seconds 90 --resolution 0.5x
+  python3 tools/analyze-macro-native.py NEW_PRIVATE_OUTPUT_DIRECTORY
+The runner acquires the shared console lease, verifies uploaded PT_LOAD bytes,
+clears stale scripted input before every launch, backs up private state and
+restores it in a finally block. Use a new output directory for each experiment.
+
+Qualified candidate SELF SHA-256:
+1a9b45ecfb3049eb6136365747a507ddb3eaea87072da0b8aedd665de4563981
+Matching packaged ELF SHA-256:
+0b8d1cf9b375860454d725963ec3ff9630b9b8cfd2c416e684e6a97dd7f03e55
+Private receipts/logs remain local under .local/macro-native/. The public report
+contains measurements and hashes only. License attribution is retained separately
+in THIRD_PARTY_NOTICES.md.
+
+2026-11-08 requalification (default on)
+Build: main + RADV robustness (#77) + core patch 0037 (vdecsvc 201, without which a race
+never starts), scripted input. The MKW bench now drives the pad (--events): title, menus, Grand
+Prix, course intro, race loading.
+- Check mode, attract scenes (dev build, 1x, 2 runs of 300 s): 111,149,056 and 118,816,768
+  sampled comparisons over five handlers, 0 differences, 0 mismatch lines.
+- Check mode, menus into a race (0.5x, 2 runs): 17,039,360 and 13,369,344 comparisons,
+  0 differences.
+- FPS (weighted), JIT vs native: attract 1x 30.35/30.41 vs 24.46/35.33; menus into a race 0.5x
+  43.09/21.28 vs 44.16/41.27. Worst frames are load spikes in every mode (JIT path, check
+  mode, native alike: 0.4-1.2 s). No difference beyond the run-to-run spread.
+- Not reached: a full race. Every mode ran out of device memory (or lost the device) while
+  the race loaded or soon after, at 1x and at 0.5x, the pool exhaustion tracked in #76; one
+  native run and one check run lasted the whole 420 s without a report.
