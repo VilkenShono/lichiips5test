@@ -5,6 +5,11 @@ foreach(pipeline_header IN ITEMS vk_graphics_pipeline.h vk_compute_pipeline.h)
     set(pipeline_wait_old "    std::condition_variable build_condvar;\n    std::mutex build_mutex;\n")
     string(FIND "${pipeline_source}" "${pipeline_wait_old}" pipeline_wait_at)
     if(pipeline_wait_at LESS 0)
+        # Lichii's graphics pipelines wait on a build queue they share: no pair of their own.
+        if(pipeline_header STREQUAL "vk_graphics_pipeline.h")
+            file(REMOVE "${PORT_BUILD_DIR}/pipeline-wait/video_core/renderer_vulkan/${pipeline_header}")
+            continue()
+        endif()
         message(FATAL_ERROR "Pinned ${pipeline_header} build wait changed")
     endif()
     string(REPLACE "${pipeline_wait_old}"

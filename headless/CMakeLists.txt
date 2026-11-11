@@ -174,9 +174,17 @@ string(REPLACE "    // \"from\" might no longer be valid if the thread was kille
 if(PS5_NATIVE)
 # Native fibers keep their 2MiB usable stack, but reserve it in the CPU flexible pool.
 # ThreadToFiber needs only context bookkeeping and allocates no unused private stack.
-string(REPLACE "    std::array<u8, DEFAULT_STACK_SIZE> stack{};"
+# Lichii keeps the stack in a std::unique_ptr<u8[]> it fills when the fiber is made.
+foreach(fiber_anchor IN ITEMS "    std::unique_ptr<u8[]> stack;"
+        "    impl->stack.reset(new u8[DEFAULT_STACK_SIZE]);\n    impl->stack_limit = impl->stack.get();")
+    string(FIND "${fiber_source}" "${fiber_anchor}" fiber_anchor_at)
+    if(fiber_anchor_at LESS 0)
+        message(FATAL_ERROR "Pinned fiber stack changed: ${fiber_anchor}")
+    endif()
+endforeach()
+string(REPLACE "    std::unique_ptr<u8[]> stack;"
     "    ::Eden::FiberStack stack;" fiber_source "${fiber_source}")
-string(REPLACE "    impl->stack_limit = impl->stack.data();"
+string(REPLACE "    impl->stack.reset(new u8[DEFAULT_STACK_SIZE]);\n    impl->stack_limit = impl->stack.get();"
     "    impl->stack.Allocate(DEFAULT_STACK_SIZE);\n    impl->stack_limit = impl->stack.data();"
     fiber_source "${fiber_source}")
 string(PREPEND fiber_source "#include \"${EDEN_PORT_DIR}/fiber_stack.h\"\n")
@@ -906,14 +914,17 @@ endif()
 # Guest core idle: count each wait and how long it lasted, and spin on the
 # interrupt flag for a bounded time before sleeping on the condition variable, because waking a
 # sleeping host thread puts the host scheduler's latency on the guest's critical path.
-string(FIND "${physical_core_source}" "void PhysicalCore::Idle() {" idle_begin)
+string(FIND "${physical_core_source}" "void PhysicalCore::Idle(KernelCore& kernel) {" idle_begin)
 string(FIND "${physical_core_source}" "bool PhysicalCore::IsInterrupted() const {" idle_end)
 if(idle_begin LESS 0 OR idle_end LESS idle_begin)
     message(FATAL_ERROR "Pinned PhysicalCore::Idle changed")
 endif()
 math(EXPR idle_length "${idle_end} - ${idle_begin}")
 string(SUBSTRING "${physical_core_source}" ${idle_begin} ${idle_length} idle_old)
-string(REPLACE "${idle_old}" [=[void PhysicalCore::Idle() {
+string(REPLACE "${idle_old}" [=[void PhysicalCore::Idle([[maybe_unused]] KernelCore& kernel) {
+    // The port's bounded spin for every title, in place of Lichii's own (yield for 100 us, Switch 2
+    // titles only): the wake-up latency statistics of the Eglantine core (m_interrupt_ns) are not
+    // in Lichii and are left out.
     const long long start = ::Eden::Performance::NowNs();
     const unsigned spins = ::Eden::Performance::idle_spin_iterations.load(std::memory_order_relaxed);
     for (unsigned i = 0; i < spins && !m_is_interrupted.load(std::memory_order_acquire); ++i)
@@ -922,15 +933,7 @@ string(REPLACE "${idle_old}" [=[void PhysicalCore::Idle() {
     {
         std::unique_lock lk{m_guard};
         slept = !m_is_interrupted;
-        m_interrupt_ns.store(0, std::memory_order_relaxed);
-        m_sleeping.store(true, std::memory_order_relaxed);
         m_on_interrupt.wait(lk, [this] { return m_is_interrupted.load(); });
-        m_sleeping.store(false, std::memory_order_relaxed);
-    }
-    if (const long long sent = m_interrupt_ns.load(std::memory_order_relaxed); slept && sent != 0) {
-        const long long woke = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                   std::chrono::steady_clock::now().time_since_epoch()).count();
-        ::Eden::Performance::CountWake(m_core_index, woke - sent);
     }
     ::Eden::Performance::CountIdle(m_core_index, ::Eden::Performance::NowNs() - start, slept);
 }
@@ -1093,16 +1096,8 @@ if(unmap_at LESS 0)
 endif()
 string(REPLACE "${unmap_old}" "            if (const auto mirror = page_table.entries.mirror_index; mirror != 0)\n                page_table.entries.ZeroRegion(base + mirror, end + mirror);\n${unmap_old}"
     arena_source "${arena_source}")
-# The guest core a tracked write comes from, for the GPU caches' deferred writes (performance.h
-# cpu_write_defer): each core queues its own, and a replayed write to GPU-modified data goes to
-# that core's dirty ranges.
-set(tracked_old "        system.Host1x().MemoryManager().ApplyOpOnPointer(p, scratch_buffers[core], [&](DAddr address) {\n            auto& current_area = rasterizer_write_areas[core];\n")
-string(FIND "${arena_source}" "${tracked_old}" tracked_at)
-if(tracked_at LESS 0)
-    message(FATAL_ERROR "Pinned HandleRasterizerWrite changed")
-endif()
-string(REPLACE "${tracked_old}" "        ::Eden::Performance::cpu_write_core = static_cast<unsigned>(core);\n${tracked_old}"
-    arena_source "${arena_source}")
+# (The deferred guest writes of the Eglantine core's rasterizer are not carried over to Lichii,
+# so the write's guest core is not noted here.)
 string(PREPEND arena_source "#include \"${EDEN_PORT_DIR}/performance.h\"\n")
 if(EDEN_A32_FASTMEM)
     # The window spans 4 GiB: only 32-bit applications get it as their fastmem arena.
@@ -1116,17 +1111,8 @@ if(EDEN_A32_FASTMEM)
         arena_source "${arena_source}")
     string(PREPEND arena_source "#include \"${PORT_ROOT}/src/fastmem.h\"\n")
 endif()
-# The 64-bit window (src/host_memory.cpp, Window64) leaves most of a Switch 2 title's accesses on
-# the page-table path (sites demoted off the window): their reads of GPU-tracked pages keep the
-# no-arena rule that a page the GPU never wrote has nothing to flush, instead of all going through
-# the GPU thread. The A32 window's checked fastmem keeps upstream's rule.
-set(unwritten_old "if (unwritten_reads_direct && nx2 && !current_page_table->fastmem_arena) {")
-string(FIND "${arena_source}" "${unwritten_old}" unwritten_at)
-if(unwritten_at LESS 0)
-    message(FATAL_ERROR "Pinned unwritten-read rule changed (fastmem window)")
-endif()
-string(REPLACE "${unwritten_old}" "if (unwritten_reads_direct && nx2 && (!current_page_table->fastmem_arena || ::Eden::Fastmem::Window64Base() != 0)) {"
-    arena_source "${arena_source}")
+# (The unwritten-page read rule of the Eglantine core, tools/eglantine-patches 0006, is not in
+# Lichii: its reads of GPU-tracked pages go by its own read traps.)
 string(PREPEND arena_source "#include \"${PORT_ROOT}/src/fastmem.h\"\n")
 write_derived("${PORT_BUILD_DIR}/memory.cpp" "${arena_source}")
 list(REMOVE_ITEM core_sources "memory.cpp")
@@ -1269,53 +1255,35 @@ if(PS5_NATIVE)
         nso_source "${nso_source}")
     # A segment is decoded where it belongs (read there directly when it is not compressed), and
     # a segment that does not decode ends the load instead of the app.
-    set(old_nso_segment [=[            if (nso_header.IsSegmentCompressed(i)) {
-                if (nso_header.IsZBICCompressed()) {
-                    // ZBIC compression
-                    const int r = Common::Compression::DecompressDataZBIC(
-                        std::span<u8>{decompressed_size}.first(nso_header.segments[i].size),
-                        std::span<const u8>{compressed_data}.first(nso_header.segments_compressed_size[i])
-                    );
-                    ASSERT(r > 0);
-                } else {
-                    // LZ4 compression
-                    int r = Common::Compression::DecompressDataLZ4(
-                        decompressed_size.data(),
-                        nso_header.segments[i].size,
-                        compressed_data.data(),
-                        nso_header.segments_compressed_size[i]
-                    );
-                    ASSERT(r == int(nso_header.segments[i].size));
-                }
-
-                std::memcpy(
-                    codeset.memory.data() + module_start + nso_header.segments[i].location,
-                    decompressed_size.data(),
-                    nso_header.segments[i].size
-                );
-            } else {
-                // Not compressed
-                std::memcpy(
-                    codeset.memory.data() + module_start + nso_header.segments[i].location,
-                    compressed_data.data(),
-                    nso_header.segments[i].size
-                );
-            }
-]=])
-    string(FIND "${nso_source}" "${old_nso_segment}" nso_segment_at)
-    if(nso_segment_at LESS 0)
+    # The block is taken by its two ends, so that the handling a core adds inside it (Lichii
+    # refuses a ZBIC segment that fails and zero-fills one that comes out short) need not match.
+    set(nso_segment_begin "            if (nso_header.IsSegmentCompressed(i)) {\n")
+    set(nso_segment_end "            codeset.segments[i].addr = module_start + nso_header.segments[i].location;")
+    string(FIND "${nso_source}" "${nso_segment_begin}" nso_segment_at)
+    string(FIND "${nso_source}" "${nso_segment_end}" nso_segment_end_at)
+    if(nso_segment_at LESS 0 OR nso_segment_end_at LESS nso_segment_at)
         message(FATAL_ERROR "Pinned NSO segment decoding changed")
     endif()
+    math(EXPR nso_segment_length "${nso_segment_end_at} - ${nso_segment_at}")
+    string(SUBSTRING "${nso_source}" ${nso_segment_at} ${nso_segment_length} old_nso_segment)
+    string(FIND "${old_nso_segment}" "decompressed_size.data()" nso_segment_scratch)
+    if(nso_segment_scratch LESS 0)
+        message(FATAL_ERROR "Pinned NSO segment decoding changed (no scratch buffer to replace)")
+    endif()
     string(REPLACE "${old_nso_segment}" [=[            if (nso_header.IsSegmentCompressed(i)) {
+                const u32 segment_size = nso_header.segments[i].size;
                 if (nso_header.IsZBICCompressed()) {
                     const int r = Common::Compression::DecompressDataZBIC(
-                        std::span<u8>{destination, nso_header.segments[i].size},
+                        std::span<u8>{destination, segment_size},
                         std::span<const u8>{compressed_data}.first(nso_header.segments_compressed_size[i]));
                     if (r <= 0) return std::nullopt;
+                    // A segment that comes out short ends in zeros, as the core fills it.
+                    if (static_cast<u32>(r) < segment_size)
+                        std::memset(destination + r, 0, segment_size - static_cast<u32>(r));
                 } else {
-                    const int r = Common::Compression::DecompressDataLZ4(destination, nso_header.segments[i].size,
+                    const int r = Common::Compression::DecompressDataLZ4(destination, segment_size,
                         compressed_data.data(), nso_header.segments_compressed_size[i]);
-                    if (r != int(nso_header.segments[i].size)) return std::nullopt;
+                    if (r != int(segment_size)) return std::nullopt;
                 }
             }
 ]=] nso_source "${nso_source}")
@@ -1354,9 +1322,12 @@ set_property(TARGET core PROPERTY SOURCES "${core_sources}")
 # The builder's vectors own every context through serialization. Parent links
 # only navigate that live tree; owning them creates parent/child cycles.
 file(READ "${PROJECT_SOURCE_DIR}/src/core/file_sys/fsmitm_romfsbuild.cpp" romfs_source)
-string(REPLACE "    std::shared_ptr<RomFSBuildDirectoryContext> parent;"
-    "    RomFSBuildDirectoryContext* parent = nullptr;" romfs_source "${romfs_source}")
-string(REPLACE "parent = std::move(parent_dir_ctx);" "parent = parent_dir_ctx.get();" romfs_source "${romfs_source}")
+# Lichii's builder already keeps a plain pointer to the parent (a parent and child owning each
+# other freed no build); the copy is compiled as it is.
+string(FIND "${romfs_source}" "    RomFSBuildDirectoryContext* parent = nullptr;" romfs_parent_at)
+if(romfs_parent_at LESS 0)
+    message(FATAL_ERROR "Pinned RomFS build context changed: a parent is no longer a plain pointer")
+endif()
 write_derived("${PORT_BUILD_DIR}/fsmitm_romfsbuild.cpp" "${romfs_source}")
 get_target_property(core_sources core SOURCES)
 list(REMOVE_ITEM core_sources file_sys/fsmitm_romfsbuild.cpp)
@@ -1449,11 +1420,11 @@ write_derived("${PORT_BUILD_DIR}/ips_layer.cpp" "${ips_source}")
 # The patch manager: a missing mod root must never enter its sorting and dereference loops, and an
 # .ips patch is named after the build ID in either case.
 file(READ "${PROJECT_SOURCE_DIR}/src/core/file_sys/patch_manager.cpp" patch_source)
-eden_patch(patch_source "std::vector<VirtualDir> patch_dirs = {sdmc_load_dir};"
-    "std::vector<VirtualDir> patch_dirs;\n    if (sdmc_load_dir) patch_dirs.push_back(sdmc_load_dir);")
-eden_patch(patch_source
-    "    std::vector<VirtualDir> patch_dirs = load_dir->GetSubdirectories();\n    if (std::find(disabled.cbegin(), disabled.cend(), \"SDMC\") == disabled.cend()) {"
-    "    std::vector<VirtualDir> patch_dirs;\n    if (load_dir != nullptr) patch_dirs = load_dir->GetSubdirectories();\n    if (sdmc_load_dir != nullptr && std::find(disabled.cbegin(), disabled.cend(), \"SDMC\") == disabled.cend()) {")
+# Lichii's patch manager checks both mod roots itself before it sorts and walks them.
+string(FIND "${patch_source}" "    if (sdmc_load_dir != nullptr) {\n        patch_dirs.push_back(sdmc_load_dir);" patch_roots_at)
+if(patch_roots_at LESS 0)
+    message(FATAL_ERROR "Pinned Eden source changed: the patch manager no longer checks its mod roots")
+endif()
 eden_patch(patch_source
     "const auto this_build_id = fmt::format(\"{:0<64}\", name.substr(0, name.find('.')));"
     "const auto this_build_id = fmt::format(\"{:0<64}\", Common::ToUpper(name.substr(0, name.find('.'))));")
@@ -2148,8 +2119,13 @@ write_derived("${PORT_BUILD_DIR}/sink_details.cpp" "#include \"devices.h\"\n${si
 file(READ "${PROJECT_SOURCE_DIR}/src/audio_core/sink/sink_stream.cpp" stream_source)
 string(REPLACE "    if (type == StreamType::In)\n        return;"
     "    if (type == StreamType::In)\n        return;\n    static_assert(std::is_same_v<decltype(samples_buffer), Common::RingBuffer<s16, 0x10000>>);\n    if (buffer.frames * device_channels > 0x10000 - samples_buffer.Size())\n        throw std::overflow_error(\"Audio PCM queue capacity exceeded\");" stream_source "${stream_source}")
-string(REPLACE "        samples_buffer.Push(new_samples);"
-    "        if (system_channels == 1 && device_channels == 2) {\n            for (std::size_t i = 0; i < new_samples.size(); i += 2) new_samples[i + 1] = new_samples[i];\n        }\n        samples_buffer.Push(new_samples);" stream_source "${stream_source}")
+set(mono_mirror_old "        pushed = samples_buffer.Push(new_samples);")
+string(FIND "${stream_source}" "${mono_mirror_old}" mono_mirror_at)
+if(mono_mirror_at LESS 0)
+    message(FATAL_ERROR "Pinned audio upmix changed")
+endif()
+string(REPLACE "${mono_mirror_old}"
+    "        if (system_channels == 1 && device_channels == 2) {\n            for (std::size_t i = 0; i < new_samples.size(); i += 2) new_samples[i + 1] = new_samples[i];\n        }\n        pushed = samples_buffer.Push(new_samples);" stream_source "${stream_source}")
 # Refresh the held frame before a partial hardware block underruns.
 string(REPLACE "    std::memcpy(last_frame.data(), &output_buffer[(frames_written - 1) * frame_size], frame_size_bytes);" "" stream_source "${stream_source}")
 string(REPLACE "        samples_buffer.Pop(&output_buffer[frames_written * frame_size], frames_available * frame_size);"

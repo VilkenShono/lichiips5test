@@ -1,0 +1,80 @@
+# Runs the port's generated-source rules (headless/CMakeLists.txt) in script mode against an
+# emulator source tree, with target commands stubbed, and logs every anchor that does not match.
+#
+#   cmake -DMIRROR=<instrumented port mirror> -DCORE=<emulator source> -DOUT=<build dir>
+#         -DLOG=<log file> [-DHARNESS_FORCE=ON] [-DHARNESS_OPTIONAL="file:line;..."] [-DNATIVE=ON]
+#         -P cmake_harness.cmake
+cmake_minimum_required(VERSION 3.25)
+file(WRITE "${LOG}" "")
+function(__harness_miss kind file line id text)
+    string(REPLACE "\n" "\\n" text "${text}")
+    file(APPEND "${LOG}" "${kind}\t${id}\t${file}:${line}\t${text}\n")
+endfunction()
+# message(FATAL_ERROR) is logged and the rules go on.
+function(message)
+    set(kind "${ARGV0}")
+    if(kind STREQUAL "FATAL_ERROR" OR kind STREQUAL "SEND_ERROR")
+        set(text "${ARGV1}${ARGV2}${ARGV3}")
+        string(REPLACE "\n" "\\n" text "${text}")
+        file(APPEND "${LOG}" "FATAL\t-\t-\t${text}\n")
+    elseif(kind STREQUAL "WARNING" OR kind STREQUAL "AUTHOR_WARNING")
+        file(APPEND "${LOG}" "WARN\t-\t-\t${ARGV1}\n")
+    endif()
+endfunction()
+# Target and directory commands: no targets exist in script mode.
+foreach(command add_library add_executable target_sources target_include_directories
+        target_compile_definitions target_compile_options target_link_libraries target_link_options
+        target_precompile_headers set_target_properties set_source_files_properties
+        add_custom_command add_custom_target add_dependencies install enable_language
+        add_subdirectory include_directories add_compile_options add_compile_definitions
+        add_link_options link_libraries set_property project cmake_language
+        fetchcontent_declare fetchcontent_makeavailable find_package)
+    cmake_language(EVAL CODE "function(${command})\nendfunction()")
+endforeach()
+function(get_target_property variable)
+    set(${variable} "" PARENT_SCOPE)
+endfunction()
+function(get_property variable)
+    set(${variable} "" PARENT_SCOPE)
+endfunction()
+function(option name)
+    if(NOT DEFINED ${name})
+        if(ARGC GREATER 2)
+            set(${name} "${ARGV2}" PARENT_SCOPE)
+        else()
+            set(${name} OFF PARENT_SCOPE)
+        endif()
+    endif()
+endfunction()
+function(execute_process)
+    file(APPEND "${LOG}" "EXEC\t-\t-\t${ARGV}\n")
+endfunction()
+
+set(PROJECT_SOURCE_DIR "${CORE}")
+set(CMAKE_SOURCE_DIR "${CORE}")
+set(CMAKE_BINARY_DIR "${OUT}")
+set(CMAKE_CURRENT_BINARY_DIR "${OUT}")
+set(PROJECT_BINARY_DIR "${OUT}")
+set(EDEN_PORT_DIR "${MIRROR}/headless")
+set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_CXX_COMPILER_ID Clang)
+set(CMAKE_SYSTEM_PROCESSOR x86_64)
+set(ARCHITECTURE_x86_64 ON)
+if(NATIVE)
+    set(PS5_NATIVE ON)
+    set(CMAKE_SYSTEM_NAME FreeBSD)
+    set(EDEN_PS5_VULKAN ON)
+    set(EDEN_VULKAN_DRIVER RADV)
+    set(ENABLE_OPENGL ON)
+    set(EDEN_PS5_OPENGL ON)
+    set(EDEN_DEVICE_FRONTEND OFF)
+    set(EDEN_GPU_PROBE OFF)
+    set(EDEN_DEV_VULKAN OFF)
+    set(EDEN_DEV_PROFILE OFF)
+    set(EDEN_DEV_WAIT_CALLERS OFF)
+    set(EDEN_DEV_ROM_ID "")
+else()
+    set(CMAKE_SYSTEM_NAME Linux)
+endif()
+include("${MIRROR}/headless/CMakeLists.txt")
+file(APPEND "${LOG}" "DONE\t-\t-\t-\n")

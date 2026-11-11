@@ -163,7 +163,12 @@ void eden_fast_paths_configure() {
     return true;
 }
 ]==])
-    eden_fast_paths_require("${eden_fp_system}" "${eden_fp_dmb_translate}" "system.cpp DMB")
+    string(FIND "${eden_fp_system}" "${eden_fp_dmb_translate}" eden_fp_dmb_at)
+    if(eden_fp_dmb_at LESS 0)
+        # Lichii's translator already leaves DMB *LD and DMB *ST out on x86 (its #161): nothing
+        # to derive, the copy is compiled as it is.
+        eden_fast_paths_require("${eden_fp_system}" "    const u32 access = CRm.ZeroExtend() & 3U;" "system.cpp DMB")
+    else()
     string(REPLACE "${eden_fp_dmb_translate}" [==[bool TranslatorVisitor::DMB(Imm<4> CRm) {
     // fast_paths.cmake: x86 already keeps the order DMB *LD and DMB *ST ask for.
     const u32 types = CRm.ZeroExtend() & 3;
@@ -176,6 +181,7 @@ void eden_fast_paths_configure() {
 }
 ]==] eden_fp_system "${eden_fp_system}")
     string(PREPEND eden_fp_system "extern \"C\" bool eden_light_dmb;  // fast_paths.cmake\nextern \"C\" unsigned long long eden_dmb_dropped;\n")
+    endif()
     write_derived("${PORT_BUILD_DIR}/a64_system.cpp" "${eden_fp_system}")
     set(EDEN_FAST_PATHS_SYSTEM "${PORT_BUILD_DIR}/a64_system.cpp")
 endmacro()
