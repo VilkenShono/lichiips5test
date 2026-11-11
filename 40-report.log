@@ -1,0 +1,3 @@
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/root       145G   36G  109G  25% /
+/home/runner/work/_temp/073b58c8-2db6-412e-aed6-e8107a16703c.sh: line 3: ccache: command not found

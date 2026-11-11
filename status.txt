@@ -1,0 +1,8 @@
+run: 43038836811 attempt 1
+url: https://github.com/VilkenShono/lichiips5test/actions/runs/43038836811
+commit: 872c1cbd89f76e9527342db680db115c23af2018
+ref: refs/heads/ci/baseline
+tools: failure
+deps: skipped
+build: skipped
+finished: 2026-11-11T14:49:39Z
